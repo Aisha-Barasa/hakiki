@@ -7,7 +7,7 @@ import { EDITABLE_FIELDS, PASS_STYLE, SEVERITY_STYLES } from "../constants/statu
  * Failing cards show the AI's plain-English explanation and, where the
  * underlying field is safely editable, an inline correction input.
  */
-export default function ErrorCard({ result, explanation, fieldValue, onChange }) {
+export default function ErrorCard({ result, explanation, fieldValue, originalValue, onChange }) {
   const { passed, severity, rule_id: ruleId, message, field } = result;
 
   if (passed) {
@@ -65,9 +65,16 @@ export default function ErrorCard({ result, explanation, fieldValue, onChange })
       {/* Inline correction input for fixable fields */}
       {canEdit && onChange && (
         <div className="pl-7 mt-3">
-          <label htmlFor={inputId} className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-            Correct field: <code className="bg-slate-100 rounded px-1.5 py-0.5 text-slate-600 font-mono text-[9px] lowercase">{field.replace(/_/g, " ")}</code>
-          </label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label htmlFor={inputId} className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Correct field: <code className="bg-slate-100 rounded px-1.5 py-0.5 text-slate-600 font-mono text-[9px] lowercase">{field.replace(/_/g, " ")}</code>
+            </label>
+            {fieldValue !== undefined && originalValue !== undefined && fieldValue !== originalValue && (
+              <span className="text-[10px] text-teal-700 bg-teal-50 border border-teal-100 rounded px-2 py-0.5 font-bold">
+                Changed from: "{originalValue}"
+              </span>
+            )}
+          </div>
           <input
             id={inputId}
             type="text"
@@ -92,6 +99,7 @@ ErrorCard.propTypes = {
   }).isRequired,
   explanation: PropTypes.string,
   fieldValue: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  originalValue: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   onChange: PropTypes.func,
 };
 

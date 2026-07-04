@@ -42,6 +42,24 @@ export default function ValidationPanel({ claim, onValidationComplete }) {
     reset();
   }, [claim?.id, reset]);
 
+  // Keyboard shortcut: Ctrl + Enter to review, revalidate with edits, or submit
+  useEffect(() => {
+    function handleGlobalKeys(e) {
+      if (e.ctrlKey && e.key === "Enter") {
+        e.preventDefault();
+        if (state === "idle") {
+          validate();
+        } else if (hasEdits) {
+          revalidateWithEdits();
+        } else if (canSubmit && state === "results") {
+          submit();
+        }
+      }
+    }
+    window.addEventListener("keydown", handleGlobalKeys);
+    return () => window.removeEventListener("keydown", handleGlobalKeys);
+  }, [state, hasEdits, canSubmit, validate, revalidateWithEdits, submit]);
+
   if (!claim) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-8">
@@ -108,7 +126,7 @@ export default function ValidationPanel({ claim, onValidationComplete }) {
           </p>
           
           <div className="my-6 p-4 bg-slate-50 border border-slate-200/60 rounded-xl max-w-sm mx-auto flex items-center justify-between">
-            <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Final Adjudication Score</span>
+            <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Final Review Score</span>
             <span className="text-lg font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-100">
               {submitResult.score}/100
             </span>
@@ -313,7 +331,7 @@ export default function ValidationPanel({ claim, onValidationComplete }) {
               {state === "loading" && (
                 <div className="bg-white border border-slate-200/80 rounded-2xl p-10 flex flex-col items-center justify-center shadow-sm">
                   <SpinnerIcon />
-                  <p className="text-sm font-semibold text-slate-700 mt-3">Adjudicating Claims Policy Rules...</p>
+                  <p className="text-sm font-semibold text-slate-700 mt-3">Reviewing Claim Policy Rules...</p>
                   <p className="text-xs text-slate-400 mt-1">Generating plain English rule interpretations</p>
                 </div>
               )}
@@ -354,20 +372,63 @@ export default function ValidationPanel({ claim, onValidationComplete }) {
                     </div>
                   </div>
 
+                  {validation.ai_summary && (
+                    <div className="bg-gradient-to-r from-teal-500/5 to-emerald-500/5 border border-teal-100 rounded-2xl p-5 shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="flex h-2 w-2 relative">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-500"></span>
+                        </span>
+                        <h4 className="text-xs font-bold text-teal-800 uppercase tracking-widest">AI Claims Assistant Summary</h4>
+                      </div>
+                      <p className="text-xs text-slate-700 leading-relaxed font-semibold">
+                        {validation.ai_summary}
+                      </p>
+                    </div>
+                  )}
+
                   <div>
                     <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
                       Validation Checklist ({validation.results?.length || 0} Rules Checked)
                     </h3>
-                    <div className="space-y-3">
-                      {validation.results?.map((result) => (
-                        <ErrorCard
-                          key={result.rule_id}
-                          result={result}
-                          explanation={validation.explanations?.[result.rule_id]}
-                          fieldValue={edits[result.field] ?? claim[result.field]}
-                          onChange={!result.passed ? editField : undefined}
-                        />
-                      ))}
+                    <div className="space-y-4">
+                      {/* Critical Errors */}
+                      {validation.results?.some(r => r.severity === "error") && (
+                        <div className="space-y-2">
+                          <h4 className="text-[10px] font-bold text-red-500 uppercase tracking-wider mb-2">Critical Errors</h4>
+                          <div className="space-y-3">
+                            {validation.results?.filter(r => r.severity === "error").map((result) => (
+                              <ErrorCard
+                                key={result.rule_id}
+                                result={result}
+                                explanation={validation.explanations?.[result.rule_id]}
+                                fieldValue={edits[result.field] ?? claim[result.field]}
+                                originalValue={claim[result.field]}
+                                onChange={!result.passed ? editField : undefined}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Warnings & Policy Checks */}
+                      {validation.results?.some(r => r.severity === "warning") && (
+                        <div className="space-y-2">
+                          <h4 className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mb-2">Warnings & Policy Checks</h4>
+                          <div className="space-y-3">
+                            {validation.results?.filter(r => r.severity === "warning").map((result) => (
+                              <ErrorCard
+                                key={result.rule_id}
+                                result={result}
+                                explanation={validation.explanations?.[result.rule_id]}
+                                fieldValue={edits[result.field] ?? claim[result.field]}
+                                originalValue={claim[result.field]}
+                                onChange={!result.passed ? editField : undefined}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -504,8 +565,22 @@ export default function ValidationPanel({ claim, onValidationComplete }) {
           )}
 
           {activeTab === "FHIR Preview" && (
-            <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm">
-              <h3 className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-3 mb-4">FHIR R4 ClaimResponse Payload</h3>
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm relative">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                <h3 className="text-sm font-bold text-slate-800">FHIR R4 ClaimResponse Payload</h3>
+                {validation?.fhir_claim_response && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(JSON.stringify(validation.fhir_claim_response, null, 2));
+                      alert("FHIR payload copied to clipboard!");
+                    }}
+                    className="text-xs bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg px-2.5 py-1 text-slate-600 font-semibold active:scale-95 transition-all"
+                  >
+                    Copy JSON
+                  </button>
+                )}
+              </div>
               {validation?.fhir_claim_response ? (
                 <pre className="text-xs text-slate-700 bg-slate-900 border border-slate-800 rounded-xl p-4 overflow-auto font-mono text-emerald-400 max-h-[450px]">
                   {JSON.stringify(validation.fhir_claim_response, null, 2)}

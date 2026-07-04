@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import ClaimList from "./components/ClaimList.jsx";
 import ValidationPanel from "./components/ValidationPanel.jsx";
 import LandingPage from "./components/LandingPage.jsx";
@@ -15,6 +15,32 @@ export default function App() {
   const [view, setView] = useState("landing"); // "landing" | "dashboard"
   const [selectedId, setSelectedId] = useState(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
+
+  // Keyboard navigation for claims queue
+  useEffect(() => {
+    if (view !== "dashboard" || claims.length === 0) return;
+
+    function handleKeyDown(e) {
+      // Ignore keypresses inside text inputs or textareas so typing is unaffected
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") {
+        return;
+      }
+
+      const currentIndex = claims.findIndex((c) => c.id === selectedId);
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        const nextIndex = Math.min(claims.length - 1, currentIndex + 1);
+        setSelectedId(claims[nextIndex].id);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        const prevIndex = Math.max(0, currentIndex - 1);
+        setSelectedId(claims[prevIndex].id);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [view, claims, selectedId]);
 
   // Auto-select the first claim once the list loads, for a quicker demo start.
   if (!selectedId && claims.length > 0) {
